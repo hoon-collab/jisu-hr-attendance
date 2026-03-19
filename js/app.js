@@ -145,18 +145,41 @@ function applyRoleBasedUI() {
 
 // ============ 초기화 ============
 document.addEventListener('DOMContentLoaded', function() {
-  document.getElementById('userAvatar').textContent = userName ? userName.charAt(0) : '?';
-  document.getElementById('userNameDisplay').textContent = userName || userEmail;
-  document.getElementById('userRoleDisplay').textContent = userRole + (userOrg ? ' / ' + userOrg : '');
+  startClock();
+  initSmartDateInputs_();
 
   if (window.innerWidth <= 768) {
     document.getElementById('mobileMenuBtn').style.display = 'flex';
   }
 
-  startClock();
-  loadInitialData();
-  initSmartDateInputs_();
+  // GitHub Pages: OAuth 인증 후 초기화
+  if (typeof initGoogleAuth === 'function') {
+    showLoading();
+    initGoogleAuth().then(function(info) {
+      // auth.js에서 userEmail, userName이 이미 설정됨
+      // 역할/조직은 getInitialData에서 서버 조회
+      updateUserUI_();
+      loadInitialData();
+    }).catch(function(err) {
+      hideLoading();
+      console.error('OAuth 인증 실패:', err);
+      showToast('로그인이 필요합니다. @zsoo.kr 계정으로 로그인해주세요.', 'error');
+    });
+  } else {
+    // GAS 내부 실행 (fallback)
+    updateUserUI_();
+    loadInitialData();
+  }
 });
+
+function updateUserUI_() {
+  var avatar = document.getElementById('userAvatar');
+  var nameDisp = document.getElementById('userNameDisplay');
+  var roleDisp = document.getElementById('userRoleDisplay');
+  if (avatar) avatar.textContent = userName ? userName.charAt(0) : '?';
+  if (nameDisp) nameDisp.textContent = userName || userEmail;
+  if (roleDisp) roleDisp.textContent = userRole + (userOrg ? ' / ' + userOrg : '');
+}
 
 /**
  * 스마트 날짜 입력: 모든 type="date" 요소에 연속 숫자 입력 지원
@@ -233,6 +256,11 @@ function loadInitialData() {
     .withSuccessHandler(function(result) {
       hideLoading();
       if (result.success) {
+        // 서버에서 역할/조직 정보 설정 (GitHub Pages용)
+        if (result.data.userRole) userRole = result.data.userRole;
+        if (result.data.userOrg) userOrg = result.data.userOrg;
+        updateUserUI_();
+
         allEmployees = result.data.employees || [];
         allTemplates = result.data.templates || [];
         todayAttendance = result.data.todayAttendance || [];
@@ -1341,9 +1369,12 @@ function loadClockAdminData() {
   var endDate = document.getElementById('clockAdminEnd').value;
   if (!startDate || !endDate) return;
   var orgFilter = document.getElementById('clockAdminOrg').value;
+  var empFilter = document.getElementById('clockAdminEmp') ? document.getElementById('clockAdminEmp').value : '';
 
   var filters = { startDate: startDate, endDate: endDate };
   if (orgFilter) filters.org = orgFilter;
+  if (empFilter) filters.employeeId = empFilter;
+  showLoading();
   google.script.run
     .withSuccessHandler(function(result) {
       hideLoading();
@@ -1351,33 +1382,123 @@ function loadClockAdminData() {
         renderClockAdminList(result.data);
       } else {
         document.getElementById('clockAdminList').innerHTML =
-          '<div class="empty-state"><i class="fas fa-users"></i><p>' + (result.message || '조회 실패') + '</p></div>';
+          '<div class="empty-state"><i class="fas fa-exclamation-triangle"></i><p>' + (result.message || '조회 실패') + '</p></div>';
       }
     })
-    .withFailureHandler(function(err) { hideLoading(); showToast('오류: ' + err.message, 'error'); })
+    .withFailureHandler(function(err) {
+      hideLoading();
+      document.getElementById('clockAdminList').innerHTML =
+        '<div class="empty-state"><i class="fas fa-exclamation-triangle"></i><p>서버 오류: ' + err.message + '</p></div>';
+    })
     .getAttendanceList(filters);
 }
 
 function renderClockAdminList(records) {
   var container = document.getElementById('clockAdminList');
-  if (records.length === 0) {
+
+  // 오늘 날짜인지 확인 (대리 출퇴근 버튼 표시 여부)
+  var todayStr = new Date().getFullYear() + '-' +
+    String(new Date().getMonth() + 1).padStart(2, '0') + '-' +
+    String(new Date().getDate()).padStart(2, '0');
+  var isToday = document.getElementById('clockAdminStart').value === todayStr &&
+    document.getElementById('clockAdminEnd').value === todayStr;
+
+  // 오늘 기록이 있는 직원 ID 맵
+  var clockedEmpIds = {};
+  if (isToday) {
+    for (var k = 0; k < records.length; k++) {
+      if (records[k].clockIn) clockedEmpIds[records[k].employeeId] = records[k];
+    }
+  }
+
+  // 오늘+미출근 직원 목록 표시
+  var adminHtml = '';
+  if (isToday && (isSuperAdmin() || isManager())) {
+    var notClockedIn = [];
+    for (var j = 0; j < allEmployees.length; j++) {
+      if (!clockedEmpIds[allEmployees[j].id]) {
+        notClockedIn.push(allEmployees[j]);
+      }
+    }
+    if (notClockedIn.length > 0) {
+      adminHtml = '<div style="padding:8px 12px;background:#FFF8E1;border-radius:6px;margin-bottom:8px;">' +
+        '<div style="font-size:12px;font-weight:600;color:#F57F17;margin-bottom:6px;">' +
+        '<i class="fas fa-exclamation-triangle"></i> 미출근 ' + notClockedIn.length + '명</div>' +
+        '<div style="display:flex;flex-wrap:wrap;gap:4px;">';
+      for (var n = 0; n < notClockedIn.length; n++) {
+        var ne = notClockedIn[n];
+        adminHtml += '<button class="btn btn-outline btn-sm" style="font-size:11px;padding:2px 8px;" ' +
+          'onclick="adminProxyClockIn(\'' + ne.id + '\',\'' + ne.name + '\')">' +
+          '<i class="fas fa-sign-in-alt" style="color:var(--primary);"></i> ' + ne.name + '</button>';
+      }
+      adminHtml += '</div></div>';
+    }
+  }
+
+  if (records.length === 0 && !adminHtml) {
     container.innerHTML = '<div class="empty-state"><i class="fas fa-users"></i><p>해당 기간 출퇴근 기록이 없습니다.</p></div>';
     return;
   }
-  var html = '<div class="table-wrapper"><table><thead><tr><th>날짜</th><th>직원</th><th>조직</th><th>출근</th><th>퇴근</th><th>외출</th><th>실근무</th><th>상태</th></tr></thead><tbody>';
-  var limit = Math.min(records.length, 100);
-  for (var i = 0; i < limit; i++) {
-    var r = records[i];
-    var outInfo = r.outTime ? (r.outTime + (r.returnTime ? '~' + r.returnTime : '~')) : '-';
-    html += '<tr><td>' + r.date + '</td><td>' + r.employeeName + '</td><td>' + r.org + '</td>' +
-      '<td>' + (r.clockIn || '-') + '</td><td>' + (r.clockOut || '-') + '</td>' +
-      '<td>' + outInfo + '</td>' +
-      '<td>' + (r.netHours || 0).toFixed(1) + 'h</td>' +
-      '<td><span class="status-badge ' + r.status + '">' + r.status + '</span></td></tr>';
+
+  var html = adminHtml;
+  if (records.length > 0) {
+    html += '<div class="table-wrapper"><table><thead><tr><th>날짜</th><th>직원</th><th>조직</th><th>출근</th><th>퇴근</th><th>외출</th><th>실근무</th><th>상태</th><th>관리</th></tr></thead><tbody>';
+    var limit = Math.min(records.length, 100);
+    for (var i = 0; i < limit; i++) {
+      var r = records[i];
+      var outInfo = r.outTime ? (r.outTime + (r.returnTime ? '~' + r.returnTime : '~')) : '-';
+      var actionBtn = '';
+      if (isToday && r.clockIn && !r.clockOut) {
+        actionBtn = '<button class="btn btn-outline btn-sm" style="font-size:11px;padding:2px 6px;" ' +
+          'onclick="adminProxyClockOut(\'' + r.id + '\',\'' + r.employeeName + '\')"><i class="fas fa-sign-out-alt" style="color:var(--danger);"></i> 퇴근</button>';
+      }
+      html += '<tr><td>' + r.date + '</td><td>' + r.employeeName + '</td><td>' + r.org + '</td>' +
+        '<td>' + (r.clockIn || '-') + '</td><td>' + (r.clockOut || '-') + '</td>' +
+        '<td>' + outInfo + '</td>' +
+        '<td>' + (r.netHours || 0).toFixed(1) + 'h</td>' +
+        '<td><span class="status-badge ' + r.status + '">' + r.status + '</span></td>' +
+        '<td>' + actionBtn + '</td></tr>';
+    }
+    html += '</tbody></table></div>';
+    if (records.length > 100) html += '<p style="text-align:center;font-size:12px;color:var(--gray-500);">최근 100건만 표시 (전체 ' + records.length + '건)</p>';
   }
-  html += '</tbody></table></div>';
-  if (records.length > 100) html += '<p style="text-align:center;font-size:12px;color:var(--gray-500);">최근 100건만 표시 (전체 ' + records.length + '건)</p>';
   container.innerHTML = html;
+}
+
+function adminProxyClockIn(empId, empName) {
+  showConfirm(empName + ' 님을 대리 출근 처리하시겠습니까?', 'in', function() {
+    showLoading();
+    google.script.run
+      .withSuccessHandler(function(result) {
+        hideLoading();
+        if (result.success) {
+          showToast(empName + ' 출근 처리 완료', 'success');
+          loadClockAdminData();
+        } else {
+          showToast(result.message, 'error');
+        }
+      })
+      .withFailureHandler(function(err) { hideLoading(); showToast('오류: ' + err.message, 'error'); })
+      .adminClockIn(empId);
+  });
+}
+
+function adminProxyClockOut(recordId, empName) {
+  showConfirm(empName + ' 님을 대리 퇴근 처리하시겠습니까?', 'out', function() {
+    showLoading();
+    google.script.run
+      .withSuccessHandler(function(result) {
+        hideLoading();
+        if (result.success) {
+          showToast(empName + ' 퇴근 처리 완료', 'success');
+          loadClockAdminData();
+        } else {
+          showToast(result.message, 'error');
+        }
+      })
+      .withFailureHandler(function(err) { hideLoading(); showToast('오류: ' + err.message, 'error'); })
+      .adminClockOut(recordId);
+  });
 }
 
 // ============ 출퇴근기록 (달력형 + 목록형) ============
