@@ -1,7 +1,7 @@
 // ============ 설정 ============
 var CONFIG = {
   // GAS Web App 배포 URL (ANYONE_ANONYMOUS)
-  GAS_API_URL: 'https://script.google.com/macros/s/AKfycbxsUS-Ys0Gm9ukUzH-j-e08EjrshjPYmiHlJU_0ACIO1bBtBHKJwhDuGsGqA5e8fmJ4/exec',
+  GAS_API_URL: 'https://script.google.com/macros/s/AKfycbw9qMHAv5TQvwR96vVVKJUuCmZXH6HE1WuIbhfxWfsDCMOcp13G6d5bpY5xjEkVpyje/exec',
 
   // Google OAuth Client ID (Google Cloud Console)
   GOOGLE_CLIENT_ID: '676135503685-mu766047qgt6l2t3ujkv5becisvde6l4.apps.googleusercontent.com',
