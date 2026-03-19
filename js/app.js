@@ -316,7 +316,8 @@ function loadInitialData() {
         // 기본 날짜 설정
         var now = new Date();
         var ym = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
-        document.getElementById('myAttMonth').value = ym;
+        var myAttMonthEl = document.getElementById('myAttMonth');
+        if (myAttMonthEl) myAttMonthEl.value = ym;
         var reportPeriodEl = document.getElementById('reportPeriod');
         if (reportPeriodEl) reportPeriodEl.value = ym;
       } else {
