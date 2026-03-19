@@ -43,6 +43,18 @@
     </div>
   </div>
 
+
+  <!-- 로딩 오버레이 -->
+  <div id="loadingOverlay" class="loading-overlay">
+    <div class="loading-spinner">
+      <div class="spinner"></div>
+      <p>데이터를 불러오는 중...</p>
+    </div>
+  </div>
+
+  <!-- Toast 컨테이너 -->
+  <div id="toastContainer" class="toast-container"></div>
+
   <!-- 사이드바 -->
   <div id="sidebar" class="sidebar">
     <div class="sidebar-header">
@@ -364,9 +376,15 @@
               <select id="clockAdminOrg" onchange="loadClockAdminData()" style="font-size:12px;">
                 <option value="">전체 조직</option>
               </select>
+              <select id="clockAdminEmp" style="font-size:12px;">
+                <option value="">전체 직원</option>
+              </select>
               <input type="date" id="clockAdminStart" style="font-size:12px;width:130px;" onchange="loadClockAdminData()">
               <span style="font-size:11px;color:var(--gray-400);">~</span>
               <input type="date" id="clockAdminEnd" style="font-size:12px;width:130px;" onchange="loadClockAdminData()">
+              <button class="btn btn-primary btn-sm" onclick="loadClockAdminData()" style="font-size:12px;">
+                <i class="fas fa-search"></i> 조회
+              </button>
             </div>
           </div>
           <div class="card-body" id="clockAdminList"></div>
@@ -1408,6 +1426,8 @@
     <i class="fas fa-bars"></i>
   </button>
 
-<script src="js/app.js"></script>
+
+  <script src="js/app.js"></script>
+
 </body>
 </html>
