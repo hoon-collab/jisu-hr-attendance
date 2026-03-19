@@ -1,6 +1,6 @@
 // ============ google.script.run 호환 래퍼 ============
 // 기존 코드의 google.script.run.withSuccessHandler(...).함수명(params)
-// 패턴을 그대로 유지하면서 fetch API로 교체합니다.
+// 패턴을 그대로 유지하면서 외부 API 호출로 교체합니다.
 
 (function() {
   // 원래 google.script.run 백업 (GAS 내부 실행 시 사용)
@@ -15,42 +15,27 @@
     return;
   }
 
-  // 외부 (GitHub Pages)에서 실행 중 — fetch 래퍼로 교체
+  // 외부 (GitHub Pages)에서 실행 중
+  // GAS 웹앱은 doGet만 안정적 (doPost는 302 리다이렉트 시 body 유실)
+  // → URL 파라미터로 action/token/params 전달
   function callGasApi(funcName, params) {
-    var payload = JSON.stringify({
-      action: funcName,
-      token: getAccessToken(),
-      params: params || null
-    });
+    var token = typeof getAccessToken === 'function' ? getAccessToken() : '';
+    var url = CONFIG.GAS_API_URL +
+      '?api=1' +
+      '&action=' + encodeURIComponent(funcName) +
+      '&token=' + encodeURIComponent(token);
 
-    // GAS doPost는 302 리다이렉트를 반환 → fetch의 redirect:'follow'는
-    // POST→GET으로 바꿔서 body를 잃어버림.
-    // 해결: URL 쿼리 파라미터로 payload를 base64 인코딩해서 doGet으로 전달하거나
-    // XMLHttpRequest를 사용 (XHR은 POST 리다이렉트에서도 body 유지)
-    return new Promise(function(resolve, reject) {
-      var xhr = new XMLHttpRequest();
-      xhr.open('POST', CONFIG.GAS_API_URL, true);
-      xhr.setRequestHeader('Content-Type', 'text/plain');
-      xhr.onload = function() {
-        if (xhr.status >= 200 && xhr.status < 300) {
-          try {
-            var result = JSON.parse(xhr.responseText);
-            resolve(result);
-          } catch (e) {
-            reject(new Error('응답 파싱 실패: ' + xhr.responseText.substring(0, 100)));
-          }
-        } else {
-          reject(new Error('서버 응답 오류: ' + xhr.status));
-        }
-      };
-      xhr.onerror = function() {
-        reject(new Error('네트워크 오류'));
-      };
-      xhr.ontimeout = function() {
-        reject(new Error('요청 시간 초과'));
-      };
-      xhr.timeout = 60000; // 60초 (GAS 실행 시간 고려)
-      xhr.send(payload);
+    if (params !== null && params !== undefined) {
+      url += '&params=' + encodeURIComponent(JSON.stringify(params));
+    }
+
+    return fetch(url, {
+      method: 'GET',
+      redirect: 'follow'
+    })
+    .then(function(resp) {
+      if (!resp.ok) throw new Error('서버 응답 오류: ' + resp.status);
+      return resp.json();
     });
   }
 
