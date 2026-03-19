@@ -154,17 +154,31 @@ document.addEventListener('DOMContentLoaded', function() {
 
   // GitHub Pages: OAuth 인증 후 초기화
   if (typeof initGoogleAuth === 'function') {
+    // GSI SDK가 async defer이므로 로드 완료 대기
+    function tryAuth() {
+      if (typeof google !== 'undefined' && google.accounts && google.accounts.oauth2) {
+        initGoogleAuth().then(function(info) {
+          updateUserUI_();
+          loadInitialData();
+        }).catch(function(err) {
+          hideLoading();
+          console.error('OAuth 인증 실패:', err);
+          if (typeof showLoginScreen_ === 'function') showLoginScreen_('로그인이 필요합니다.');
+        });
+      } else {
+        // SDK 아직 미로드 → 재시도 (최대 5초)
+        if (!tryAuth._count) tryAuth._count = 0;
+        tryAuth._count++;
+        if (tryAuth._count < 25) {
+          setTimeout(tryAuth, 200);
+        } else {
+          hideLoading();
+          if (typeof showLoginScreen_ === 'function') showLoginScreen_('Google 로그인 서비스 로드에 실패했습니다. 페이지를 새로고침해주세요.');
+        }
+      }
+    }
     showLoading();
-    initGoogleAuth().then(function(info) {
-      // auth.js에서 userEmail, userName이 이미 설정됨
-      // 역할/조직은 getInitialData에서 서버 조회
-      updateUserUI_();
-      loadInitialData();
-    }).catch(function(err) {
-      hideLoading();
-      console.error('OAuth 인증 실패:', err);
-      showToast('로그인이 필요합니다. @zsoo.kr 계정으로 로그인해주세요.', 'error');
-    });
+    tryAuth();
   } else {
     // GAS 내부 실행 (fallback)
     updateUserUI_();
