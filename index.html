@@ -27,6 +27,22 @@
   <!-- Toast 컨테이너 -->
   <div id="toastContainer" class="toast-container"></div>
 
+  <!-- 로그인 화면 -->
+  <div id="loginScreen" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%); z-index:10000; justify-content:center; align-items:center;">
+    <div style="background:#fff; border-radius:16px; padding:48px 40px; text-align:center; box-shadow:0 20px 60px rgba(0,0,0,0.3); max-width:400px; width:90%;">
+      <div style="width:64px; height:64px; background:#4F46E5; border-radius:16px; display:flex; align-items:center; justify-content:center; margin:0 auto 20px;">
+        <i class="fas fa-clock" style="color:#fff; font-size:28px;"></i>
+      </div>
+      <h1 style="font-size:22px; font-weight:700; color:#1E1B4B; margin-bottom:4px;">근태관리</h1>
+      <p style="font-size:13px; color:#6B7280; margin-bottom:24px;">지수회계법인</p>
+      <button onclick="handleLoginClick()" style="width:100%; padding:12px; background:#4F46E5; color:#fff; border:none; border-radius:8px; font-size:15px; font-weight:600; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:8px; transition:background 0.2s;">
+        <i class="fab fa-google"></i> Google 계정으로 로그인
+      </button>
+      <p id="loginMessage" style="font-size:12px; color:#EF4444; margin-top:12px; min-height:16px;"></p>
+      <p style="font-size:11px; color:#9CA3AF; margin-top:8px;">@zsoo.kr 계정만 접속 가능합니다</p>
+    </div>
+  </div>
+
   <!-- 사이드바 -->
   <div id="sidebar" class="sidebar">
     <div class="sidebar-header">
@@ -99,7 +115,7 @@
   </div>
 
   <!-- 메인 컨텐츠 -->
-  <div class="main-content">
+  <div id="mainContent" class="main-content">
 
     <!-- ===== 대시보드 ===== -->
     <div id="page-dashboard" class="page-section active">
