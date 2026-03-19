@@ -17,19 +17,40 @@
 
   // 외부 (GitHub Pages)에서 실행 중 — fetch 래퍼로 교체
   function callGasApi(funcName, params) {
-    return fetch(CONFIG.GAS_API_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain' }, // CORS preflight 회피
-      body: JSON.stringify({
-        action: funcName,
-        token: getAccessToken(),
-        params: params || null
-      }),
-      redirect: 'follow'
-    })
-    .then(function(resp) {
-      if (!resp.ok) throw new Error('서버 응답 오류: ' + resp.status);
-      return resp.json();
+    var payload = JSON.stringify({
+      action: funcName,
+      token: getAccessToken(),
+      params: params || null
+    });
+
+    // GAS doPost는 302 리다이렉트를 반환 → fetch의 redirect:'follow'는
+    // POST→GET으로 바꿔서 body를 잃어버림.
+    // 해결: URL 쿼리 파라미터로 payload를 base64 인코딩해서 doGet으로 전달하거나
+    // XMLHttpRequest를 사용 (XHR은 POST 리다이렉트에서도 body 유지)
+    return new Promise(function(resolve, reject) {
+      var xhr = new XMLHttpRequest();
+      xhr.open('POST', CONFIG.GAS_API_URL, true);
+      xhr.setRequestHeader('Content-Type', 'text/plain');
+      xhr.onload = function() {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          try {
+            var result = JSON.parse(xhr.responseText);
+            resolve(result);
+          } catch (e) {
+            reject(new Error('응답 파싱 실패: ' + xhr.responseText.substring(0, 100)));
+          }
+        } else {
+          reject(new Error('서버 응답 오류: ' + xhr.status));
+        }
+      };
+      xhr.onerror = function() {
+        reject(new Error('네트워크 오류'));
+      };
+      xhr.ontimeout = function() {
+        reject(new Error('요청 시간 초과'));
+      };
+      xhr.timeout = 60000; // 60초 (GAS 실행 시간 고려)
+      xhr.send(payload);
     });
   }
 
