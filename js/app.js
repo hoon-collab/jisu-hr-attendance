@@ -159,6 +159,7 @@ document.addEventListener('DOMContentLoaded', function() {
       if (typeof google !== 'undefined' && google.accounts && google.accounts.oauth2) {
         initGoogleAuth().then(function(info) {
           updateUserUI_();
+          showLoading('서버 연결 중... (최초 10~20초 소요)');
           loadInitialData();
         }).catch(function(err) {
           hideLoading();
@@ -265,7 +266,9 @@ function applySmartDate_(el) {
 }
 
 function loadInitialData() {
-  showLoading();
+  showLoading('서버 데이터 로드 중...');
+  // GitHub Pages: 번들 API로 한 번에 로드
+  var apiFn = (typeof initGoogleAuth === 'function') ? 'getInitialDataFull' : 'getInitialData';
   google.script.run
     .withSuccessHandler(function(result) {
       hideLoading();
@@ -287,6 +290,12 @@ function loadInitialData() {
         canPayrollAdmin = result.data.canPayrollAdmin || false;
         var pendingRequestsCount = result.data.pendingRequests || 0;
         window._dashPendingRequests = pendingRequestsCount;
+
+        // 번들 대시보드 데이터 캐싱 (GitHub Pages)
+        if (result.data.dashStats) window._bundledDashStats = result.data.dashStats;
+        if (result.data.headcount) window._bundledHeadcount = result.data.headcount;
+        if (result.data.renewalAlerts) window._bundledRenewalAlerts = result.data.renewalAlerts;
+        if (result.data.capacityData) window._bundledCapacityData = result.data.capacityData;
 
         // 직원 데이터 (탭은 lazy load)
 
@@ -328,7 +337,7 @@ function loadInitialData() {
       hideLoading();
       showToast('서버 오류: ' + err.message, 'error');
     })
-    .getInitialData();
+    [apiFn]();
 }
 
 function refreshData() {
@@ -496,8 +505,25 @@ function renderDashboard() {
     loadDashboardPeriodStats();
   }
 
-  // 오늘 출퇴근 현황 lazy load (관리자만)
+  // 오늘 출퇴근 현황 (관리자만)
   if (!isEmployeeRole()) {
+    // 번들 데이터 사용 (GitHub Pages에서 getInitialDataFull로 이미 로드됨)
+    if (window._bundledDashStats) {
+      // 이미 todayAttendance에 데이터가 있으므로 추가 API 호출 불필요
+      if (window._bundledHeadcount) { _headcountData = window._bundledHeadcount; }
+      if (window._bundledRenewalAlerts) { _renewalAlertsCache = window._bundledRenewalAlerts; }
+      if (window._bundledCapacityData) { _capacityCache = window._bundledCapacityData; }
+      loadHeadcountChart();
+      loadRenewalAlerts();
+      loadCapacityAnalysis();
+      // 번들 사용 후 클리어 (새로고침 시 다시 로드)
+      delete window._bundledDashStats;
+      delete window._bundledHeadcount;
+      delete window._bundledRenewalAlerts;
+      delete window._bundledCapacityData;
+      return;
+    }
+
     google.script.run.withSuccessHandler(function(result) {
       if (!result.success) return;
       todayAttendance = result.data;
@@ -5657,12 +5683,20 @@ function saveProfile() {
 }
 
 // ============ UI 유틸 ============
-function showLoading() {
-  document.getElementById('loadingOverlay').classList.remove('hidden');
+function showLoading(msg) {
+  var overlay = document.getElementById('loadingOverlay');
+  overlay.classList.remove('hidden');
+  overlay.style.display = '';
+  var msgEl = document.getElementById('loadingMessage');
+  if (msgEl && msg) msgEl.textContent = msg;
 }
 
 function hideLoading() {
-  document.getElementById('loadingOverlay').classList.add('hidden');
+  var overlay = document.getElementById('loadingOverlay');
+  overlay.classList.add('hidden');
+  overlay.style.display = 'none';
+  var msgEl = document.getElementById('loadingMessage');
+  if (msgEl) msgEl.textContent = '데이터를 불러오는 중...';
 }
 
 function showToast(message, type) {
