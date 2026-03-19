@@ -1,0 +1,1397 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>지수회계법인 - 근태관리</title>
+  <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="css/app.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <script src="js/config.js"></script>
+  <script src="js/auth.js"></script>
+  <script src="js/api.js"></script>
+</head>
+<body>
+
+  <!-- 로딩 오버레이 -->
+  <div id="loadingOverlay" class="loading-overlay">
+    <div class="loading-spinner">
+      <div class="spinner"></div>
+      <p>데이터를 불러오는 중...</p>
+    </div>
+  </div>
+
+  <!-- Toast 컨테이너 -->
+  <div id="toastContainer" class="toast-container"></div>
+
+  <!-- 사이드바 -->
+  <div id="sidebar" class="sidebar">
+    <div class="sidebar-header">
+      <h1>근태관리</h1>
+      <div class="subtitle">지수회계법인</div>
+    </div>
+    <nav class="sidebar-nav">
+      <div class="nav-section-title">메인</div>
+      <div class="nav-item active" onclick="navigateTo('dashboard')">
+        <i class="fas fa-chart-pie"></i>
+        <span>대시보드</span>
+      </div>
+      <div class="nav-item" onclick="navigateTo('clock')">
+        <i class="fas fa-clock"></i>
+        <span>출퇴근</span>
+      </div>
+      <div class="nav-item" onclick="navigateTo('schedule')">
+        <i class="fas fa-calendar-alt"></i>
+        <span>근무일정</span>
+      </div>
+
+      <div class="nav-item" onclick="navigateTo('att-record')">
+        <i class="fas fa-clipboard-list"></i>
+        <span>출퇴근기록</span>
+      </div>
+
+      <div class="nav-section-title">관리</div>
+      <div class="nav-item" onclick="navigateTo('leave')">
+        <i class="fas fa-plane-departure"></i>
+        <span>휴가관리</span>
+        <span class="badge" id="leaveBadge" style="display:none;">0</span>
+      </div>
+      <div class="nav-item" onclick="navigateTo('leave-accrual')">
+        <i class="fas fa-seedling"></i>
+        <span>휴가 발생</span>
+      </div>
+      <div class="nav-item" onclick="navigateTo('request')">
+        <i class="fas fa-hand-paper"></i>
+        <span>요청</span>
+        <span class="badge" id="requestBadge" style="display:none;">0</span>
+      </div>
+      <div class="nav-item" onclick="navigateTo('payroll')">
+        <i class="fas fa-won-sign"></i>
+        <span>급여</span>
+      </div>
+      <div class="nav-item" onclick="navigateTo('employee')">
+        <i class="fas fa-users"></i>
+        <span>직원관리</span>
+      </div>
+
+      <div class="nav-section-title">분석</div>
+      <div class="nav-item" onclick="navigateTo('report')">
+        <i class="fas fa-chart-bar"></i>
+        <span>리포트</span>
+      </div>
+      <div class="nav-item" onclick="navigateTo('settings')">
+        <i class="fas fa-cog"></i>
+        <span>설정</span>
+      </div>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="user-info" style="cursor:pointer;" onclick="navigateTo('profile')" title="내 프로필">
+        <div class="user-avatar" id="userAvatar"></div>
+        <div>
+          <div style="color:var(--gray-300);font-weight:600;" id="userNameDisplay"></div>
+          <div style="color:var(--gray-500);font-size:11px;" id="userRoleDisplay"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 메인 컨텐츠 -->
+  <div class="main-content">
+
+    <!-- ===== 대시보드 ===== -->
+    <div id="page-dashboard" class="page-section active">
+      <div class="page-header">
+        <h2 id="dashDateTitle"></h2>
+        <div class="header-actions">
+          <button class="btn btn-outline btn-sm" onclick="refreshData()">
+            <i class="fas fa-sync-alt"></i> 새로고침
+          </button>
+        </div>
+      </div>
+      <div class="page-body">
+        <!-- Row 1: 오늘 실시간 현황 + 출퇴근 누적 + 관리자 작업 -->
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:16px;">
+          <!-- 오늘의 근무 현황 -->
+          <div class="card">
+            <div class="card-header"><h3><i class="fas fa-users" style="color:var(--primary);margin-right:6px;"></i>오늘의 근무 현황</h3></div>
+            <div class="card-body" id="dashTodayStats" style="text-align:center;">
+              <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;">
+                <div><div style="font-size:32px;font-weight:800;color:var(--primary);" id="dashStatIn">0</div><div style="font-size:12px;color:var(--gray-500);">출근</div></div>
+                <div><div style="font-size:32px;font-weight:800;color:var(--danger);" id="dashStatLate">0</div><div style="font-size:12px;color:var(--gray-500);">지각</div></div>
+                <div><div style="font-size:32px;font-weight:800;color:var(--warning);" id="dashStatAbsent">0</div><div style="font-size:12px;color:var(--gray-500);">미출근</div></div>
+              </div>
+              <div style="margin-top:12px;display:grid;grid-template-columns:repeat(3,1fr);gap:12px;">
+                <div><div style="font-size:20px;font-weight:700;color:var(--success);" id="dashStatOut">0</div><div style="font-size:11px;color:var(--gray-500);">퇴근</div></div>
+                <div><div style="font-size:20px;font-weight:700;color:var(--info);" id="dashStatLeave">0</div><div style="font-size:11px;color:var(--gray-500);">휴가</div></div>
+                <div><div style="font-size:20px;font-weight:700;color:var(--gray-600);" id="dashStatTotal">0</div><div style="font-size:11px;color:var(--gray-500);">전체</div></div>
+              </div>
+            </div>
+          </div>
+          <!-- 출퇴근 누적 -->
+          <div class="card">
+            <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;">
+              <h3><i class="fas fa-chart-bar" style="color:var(--accent);margin-right:6px;"></i>출퇴근 누적</h3>
+              <div style="display:flex;gap:4px;align-items:center;">
+                <input type="date" id="dashPeriodStart" style="font-size:11px;padding:4px 6px;width:120px;" onchange="loadDashboardPeriodStats()">
+                <span style="font-size:11px;color:var(--gray-400);">~</span>
+                <input type="date" id="dashPeriodEnd" style="font-size:11px;padding:4px 6px;width:120px;" onchange="loadDashboardPeriodStats()">
+              </div>
+            </div>
+            <div class="card-body" id="dashCumulativeStats" style="font-size:13px;">
+              <div style="text-align:center;padding:16px;color:var(--gray-400);"><i class="fas fa-spinner fa-spin"></i></div>
+            </div>
+          </div>
+          <!-- 관리자 필요한 작업 -->
+          <div class="card">
+            <div class="card-header"><h3><i class="fas fa-tasks" style="color:var(--warning);margin-right:6px;"></i>관리자 필요한 작업</h3></div>
+            <div class="card-body" id="dashAdminTasks">
+              <div style="text-align:center;padding:16px;color:var(--gray-400);"><i class="fas fa-spinner fa-spin"></i></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Row 2: 리포트 현황 + 휴가 현황 -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;">
+          <div class="card">
+            <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;">
+              <h3><i class="fas fa-table" style="color:var(--info);margin-right:6px;"></i>리포트 현황</h3>
+              <div style="display:flex;gap:4px;align-items:center;">
+                <select id="dashReportOrg" style="font-size:11px;padding:4px;" onchange="loadDashboardPeriodStats()">
+                  <option value="">전체 조직</option>
+                </select>
+              </div>
+            </div>
+            <div class="card-body" id="dashReportTable" style="max-height:400px;overflow-y:auto;">
+              <div class="empty-state" style="padding:20px;"><p>로딩 중...</p></div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;">
+              <h3><i class="fas fa-umbrella-beach" style="color:var(--success);margin-right:6px;"></i>휴가 현황</h3>
+              <select id="dashLeaveOrg" style="font-size:11px;padding:4px;" onchange="renderDashLeaves_()">
+                <option value="">전체 조직</option>
+              </select>
+            </div>
+            <div class="card-body" id="dashLeaveStatus" style="max-height:400px;overflow-y:auto;">
+              <div class="empty-state" style="padding:20px;"><p>로딩 중...</p></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Row 3: 조직별 출근율 바 -->
+        <div class="card" style="margin-bottom:16px;">
+          <div class="card-header"><h3><i class="fas fa-building" style="color:var(--primary);margin-right:6px;"></i>조직별 출근율 (오늘)</h3></div>
+          <div class="card-body" id="dashOrgChart"></div>
+        </div>
+        <!-- 월별 인원 추이 차트 (HR_RAW) -->
+        <div class="card" style="margin-top:16px;" id="dashHeadcountCard" style="display:none;">
+          <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;">
+            <h3><i class="fas fa-chart-line" style="color:var(--primary);margin-right:6px;"></i>월별 인원 추이</h3>
+            <div style="display:flex;gap:8px;">
+              <button class="btn btn-outline btn-sm" onclick="switchHeadcountChart('type')" id="hcChartTypeBtn" style="font-weight:700;">고용형태별</button>
+              <button class="btn btn-outline btn-sm" onclick="switchHeadcountChart('team')" id="hcChartTeamBtn">팀별</button>
+            </div>
+          </div>
+          <div class="card-body" style="padding:16px;">
+            <canvas id="headcountChart" height="260"></canvas>
+          </div>
+        </div>
+        <!-- 재계약 알림 + 케파 분석 (HR_RAW) -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px;" id="dashHRCardsRow" style="display:none;">
+          <div class="card">
+            <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;">
+              <h3><i class="fas fa-file-contract" style="color:var(--warning);margin-right:6px;"></i>재계약 검토 알림</h3>
+              <button class="btn btn-outline btn-sm" onclick="loadRenewalAlerts()" title="새로고침"><i class="fas fa-sync-alt"></i></button>
+            </div>
+            <div class="card-body" id="dashRenewalAlerts" style="max-height:360px;overflow-y:auto;">
+              <div style="text-align:center;padding:20px;color:var(--gray-400);font-size:13px;"><i class="fas fa-spinner fa-spin"></i> 로딩 중...</div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-header"><h3><i class="fas fa-chart-bar" style="color:var(--info);margin-right:6px;"></i>팀별 처리 역량 (케파)</h3></div>
+            <div class="card-body" id="dashCapacity" style="max-height:360px;overflow-y:auto;">
+              <div style="text-align:center;padding:20px;color:var(--gray-400);font-size:13px;"><i class="fas fa-spinner fa-spin"></i> 로딩 중...</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== 출퇴근 ===== -->
+    <div id="page-clock" class="page-section">
+      <div class="page-header">
+        <h2>출퇴근</h2>
+      </div>
+      <div class="page-body">
+        <div id="clockCard" class="clock-card">
+          <div class="clock-time" id="clockTime">--:--</div>
+          <div class="clock-date" id="clockDate"></div>
+          <div class="clock-status" id="clockStatus">
+            <i class="fas fa-circle" style="font-size:8px;"></i> <span>상태 확인중</span>
+          </div>
+          <div class="clock-buttons">
+            <button class="clock-btn in" id="btnClockIn" onclick="handleClockIn()" disabled>
+              <i class="fas fa-sign-in-alt"></i> 출근
+            </button>
+            <button class="clock-btn out" id="btnClockOut" onclick="handleClockOut()" disabled>
+              <i class="fas fa-sign-out-alt"></i> 퇴근
+            </button>
+          </div>
+          <div class="clock-buttons" style="margin-top:10px;" id="outReturnBtns">
+            <button class="clock-btn out" id="btnGoOut" onclick="handleOutReturn('out')" disabled style="font-size:13px;padding:10px 24px;">
+              <i class="fas fa-walking"></i> 외출
+            </button>
+            <button class="clock-btn in" id="btnReturn" onclick="handleOutReturn('return')" disabled style="font-size:13px;padding:10px 24px;">
+              <i class="fas fa-undo"></i> 복귀
+            </button>
+          </div>
+        </div>
+
+        <!-- 시프티 스타일 3탭: 스케줄 / 출퇴근기록 / 요청내역 -->
+        <div class="clock-tabs" style="display:flex;gap:0;border-bottom:2px solid var(--gray-200);margin-bottom:16px;">
+          <button class="clock-tab active" id="clockTabSchedule" onclick="switchClockTab('schedule')">스케줄</button>
+          <button class="clock-tab" id="clockTabRecord" onclick="switchClockTab('record')">출퇴근기록</button>
+          <button class="clock-tab" id="clockTabRequest" onclick="switchClockTab('request')">요청 내역</button>
+        </div>
+
+        <!-- 탭 1: 내 스케줄 (시프티 스타일) -->
+        <div id="clockPanelSchedule">
+          <div style="display:flex;gap:16px;">
+            <!-- 좌: 내 근로 통계 -->
+            <div style="min-width:260px;max-width:280px;">
+              <div class="card" style="margin-bottom:12px;">
+                <div class="card-header"><h3>내 근로 통계</h3></div>
+                <div class="card-body" id="clockMyWorkStats" style="font-size:13px;">
+                  <div style="text-align:center;color:var(--gray-400);padding:12px;"><i class="fas fa-spinner fa-spin"></i></div>
+                </div>
+              </div>
+              <div class="card">
+                <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;">
+                  <h3>내 휴가 통계</h3>
+                </div>
+                <div class="card-body" id="clockMyLeaveStats" style="font-size:13px;">
+                  <div style="text-align:center;color:var(--gray-400);padding:12px;"><i class="fas fa-spinner fa-spin"></i></div>
+                </div>
+              </div>
+            </div>
+            <!-- 우: 내 스케줄 달력 -->
+            <div style="flex:1;">
+              <div class="card">
+                <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;">
+                  <div class="calendar-nav">
+                    <button class="btn btn-outline btn-sm" onclick="changeMySchedMonth(-1)"><i class="fas fa-chevron-left"></i></button>
+                    <button class="btn btn-outline btn-sm" onclick="changeMySchedMonth(0)">오늘</button>
+                    <button class="btn btn-outline btn-sm" onclick="changeMySchedMonth(1)"><i class="fas fa-chevron-right"></i></button>
+                  </div>
+                  <h3 id="clockSchedTitle">2026 3월</h3>
+                  <div style="display:flex;gap:4px;">
+                    <button class="btn btn-outline btn-sm active" id="mySchedViewMonth" onclick="switchMySchedView('month')">월</button>
+                  </div>
+                </div>
+                <div class="card-body" id="clockMyScheduleGrid" style="padding:8px;"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 탭 2: 내 출퇴근기록 -->
+        <div id="clockPanelRecord" style="display:none;">
+          <div style="display:flex;gap:12px;align-items:center;margin-bottom:12px;">
+            <h3>내 출퇴근기록</h3>
+            <input type="date" id="myAttStart" style="font-size:12px;" onchange="loadMyAttendance()">
+            <span style="color:var(--gray-400);">~</span>
+            <input type="date" id="myAttEnd" style="font-size:12px;" onchange="loadMyAttendance()">
+          </div>
+          <div style="display:flex;gap:8px;margin-bottom:12px;font-size:12px;">
+            <label style="display:flex;align-items:center;gap:4px;"><input type="checkbox" checked class="myAttFilter" value="정상" onchange="filterMyAtt()"><span style="color:var(--success);">&#9632;</span> 정상적인 기록</label>
+            <label style="display:flex;align-items:center;gap:4px;"><input type="checkbox" checked class="myAttFilter" value="지각" onchange="filterMyAtt()"><span style="color:var(--warning);">&#9632;</span> 지각 기록</label>
+            <label style="display:flex;align-items:center;gap:4px;"><input type="checkbox" checked class="myAttFilter" value="조퇴" onchange="filterMyAtt()"><span style="color:var(--warning);">&#9632;</span> 조퇴 기록</label>
+          </div>
+          <div class="card">
+            <div class="card-body" id="myAttendanceList" style="padding:0;"></div>
+          </div>
+        </div>
+
+        <!-- 탭 3: 내 요청 내역 -->
+        <div id="clockPanelRequest" style="display:none;">
+          <div style="display:flex;gap:12px;align-items:center;margin-bottom:12px;">
+            <h3>내 요청들</h3>
+            <input type="date" id="myReqStart" style="font-size:12px;">
+            <span style="color:var(--gray-400);">~</span>
+            <input type="date" id="myReqEnd" style="font-size:12px;">
+          </div>
+          <div style="display:flex;gap:16px;margin-bottom:12px;font-size:13px;">
+            <span>대기중인 요청 수 <strong id="myReqPending" style="color:var(--warning);">0</strong></span>
+            <span>완료된 요청 수 <strong id="myReqDone" style="color:var(--gray-600);">0</strong></span>
+          </div>
+          <div class="card">
+            <div class="card-body" id="myRequestList" style="padding:0;">
+              <div style="text-align:center;padding:40px;color:var(--gray-400);"><i class="fas fa-inbox" style="font-size:24px;margin-bottom:8px;"></i><p>요청 내역이 없습니다.</p></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 관리자용 팀원 출퇴근 현황 -->
+        <div class="card" id="clockAdminSection" style="display:none;margin-top:16px;">
+          <div class="card-header" style="flex-wrap:wrap;gap:8px;">
+            <h3>팀원 출퇴근 현황</h3>
+            <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+              <!-- 기간 선택 (일/주/월) -->
+              <div class="schedule-view-toggle" style="margin-right:4px;">
+                <button class="btn btn-outline btn-sm active" id="adminPeriodDay" onclick="setAdminPeriod('day')">일</button>
+                <button class="btn btn-outline btn-sm" id="adminPeriodWeek" onclick="setAdminPeriod('week')">주</button>
+                <button class="btn btn-outline btn-sm" id="adminPeriodMonth" onclick="setAdminPeriod('month')">월</button>
+              </div>
+              <select id="clockAdminOrg" onchange="loadClockAdminData()" style="font-size:12px;">
+                <option value="">전체 조직</option>
+              </select>
+              <input type="date" id="clockAdminStart" style="font-size:12px;width:130px;" onchange="loadClockAdminData()">
+              <span style="font-size:11px;color:var(--gray-400);">~</span>
+              <input type="date" id="clockAdminEnd" style="font-size:12px;width:130px;" onchange="loadClockAdminData()">
+            </div>
+          </div>
+          <div class="card-body" id="clockAdminList"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== 출퇴근기록 (관리자) ===== -->
+    <div id="page-att-record" class="page-section">
+      <div class="page-header">
+        <h2>출퇴근기록</h2>
+        <div class="header-actions">
+          <div class="att-view-toggle">
+            <button class="btn btn-outline btn-sm active" id="attViewCal" onclick="switchAttView('calendar')">
+              <i class="fas fa-calendar-alt"></i> 달력형
+            </button>
+            <button class="btn btn-outline btn-sm" id="attViewList" onclick="switchAttView('list')">
+              <i class="fas fa-list"></i> 목록형
+            </button>
+          </div>
+          <button class="btn btn-primary btn-sm" onclick="openAddAttRecordModal()">
+            <i class="fas fa-plus"></i> 출퇴근기록 추가
+          </button>
+        </div>
+      </div>
+      <div class="page-body">
+        <!-- 필터 -->
+        <div class="att-controls" style="flex-wrap:wrap;">
+          <input type="month" id="attRecMonth" onchange="loadAttRecordData()" style="font-size:13px;">
+          <select id="attRecOrg" onchange="loadAttRecordData()" style="font-size:13px;">
+            <option value="">전체 조직</option>
+          </select>
+          <select id="attRecEmployee" onchange="filterAttRecordLocal()" style="font-size:13px;display:none;">
+            <option value="">전체 직원</option>
+          </select>
+          <input type="text" id="attRecSearch" placeholder="직원 검색..." oninput="debouncedFilterAttRecord()" style="font-size:13px;width:120px;display:none;">
+          <label>지각범위 <input type="number" id="attLateThreshold" value="10" min="0" onchange="renderAttCalendar()">분</label>
+          <label><input type="checkbox" id="attShowLeave" checked onchange="renderAttCalendar()"> 휴가</label>
+          <div class="att-summary-bar" id="attSummaryBar" style="margin-left:auto;">
+            <span>총 시간: <strong id="attTotalHours">0h</strong></span>
+            <span>총 급여: <strong id="attTotalPay">₩0</strong></span>
+          </div>
+        </div>
+        <!-- 달력형 뷰 -->
+        <div id="attCalendarView">
+          <div class="att-grid-wrapper" id="attGridContainer">
+            <div class="empty-state"><i class="fas fa-clock"></i><p>월을 선택하세요.</p></div>
+          </div>
+        </div>
+        <!-- 목록형 뷰 -->
+        <div id="attListView" style="display:none;">
+          <div class="filter-bar" style="margin-bottom:8px;">
+            <input type="date" id="attListStart" style="font-size:12px;" onchange="loadAttListData()">
+            <span>~</span>
+            <input type="date" id="attListEnd" style="font-size:12px;" onchange="loadAttListData()">
+            <div class="search-input" style="margin-left:auto;">
+              <i class="fas fa-search"></i>
+              <input type="text" id="attListSearch" placeholder="이름, 사원번호 검색..." oninput="debouncedFilterAttList()">
+            </div>
+          </div>
+          <div class="table-wrapper" id="attListContainer"></div>
+          <div id="attListPagination" style="display:flex;align-items:center;justify-content:center;gap:8px;margin-top:12px;"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== 근무일정 ===== -->
+    <div id="page-schedule" class="page-section">
+      <div class="page-header">
+        <h2>근무일정</h2>
+        <div class="header-actions">
+          <button class="btn btn-primary" onclick="openAddScheduleModal()">
+            <i class="fas fa-plus"></i> 근무일정 추가
+          </button>
+        </div>
+      </div>
+      <div class="page-body">
+        <!-- 상단 컨트롤 -->
+        <div class="schedule-controls" style="margin-bottom: 12px;">
+          <div class="schedule-view-toggle">
+            <button class="btn btn-outline btn-sm" id="schedViewDay" onclick="switchScheduleView('day')">
+              <i class="fas fa-clock"></i> 일
+            </button>
+            <button class="btn btn-outline btn-sm" id="schedViewWeek" onclick="switchScheduleView('week')">
+              <i class="fas fa-th"></i> 주
+            </button>
+            <button class="btn btn-outline btn-sm active" id="schedViewCal" onclick="switchScheduleView('calendar')">
+              <i class="fas fa-calendar-alt"></i> 월
+            </button>
+            <button class="btn btn-outline btn-sm" id="schedViewList" onclick="switchScheduleView('list')">
+              <i class="fas fa-list"></i> 목록
+            </button>
+          </div>
+          <select id="scheduleOrgFilter" onchange="loadSchedule()" style="font-size:13px;">
+            <option value="">전체 조직</option>
+          </select>
+          <label style="font-size:12px;display:flex;align-items:center;gap:4px;">
+            <input type="checkbox" id="schedShowLeave" checked onchange="loadSchedule()"> 휴가 표시
+          </label>
+          <span id="scheduleTotalHours" class="schedule-total-hours" style="display:none;"></span>
+          <button class="btn btn-sm btn-primary" id="schedPublishBtn" style="display:none;" onclick="publishSelectedSchedules()"><i class="fas fa-paper-plane"></i> 게시</button>
+          <button class="btn btn-sm btn-outline" id="schedUnpublishBtn" style="display:none;" onclick="unpublishSelectedSchedules()"><i class="fas fa-eye-slash"></i> 미게시</button>
+          <button class="btn btn-sm btn-outline" id="schedCopyBtn" style="display:none;" onclick="openCopyScheduleModal()"><i class="fas fa-copy"></i> 주간 복사</button>
+        </div>
+
+        <!-- 일간 타임라인 뷰 (시프티 스타일) -->
+        <div id="scheduleDayView" style="display:none;">
+          <div class="calendar-header" style="margin-bottom:12px;">
+            <div class="calendar-nav">
+              <button class="btn btn-outline btn-sm" onclick="changeDay(-1)"><i class="fas fa-chevron-left"></i></button>
+              <button class="btn btn-outline btn-sm" onclick="changeDay(0)">오늘</button>
+              <button class="btn btn-outline btn-sm" onclick="changeDay(1)"><i class="fas fa-chevron-right"></i></button>
+              <input type="date" id="dayDatePicker" class="btn-outline btn-sm" style="padding:5px 10px;font-size:12px;border:1px solid var(--gray-300);border-radius:var(--radius-sm);cursor:pointer;" onchange="jumpToDay(this.value)">
+            </div>
+            <h3 id="dayTitle"></h3>
+          </div>
+          <div class="day-timeline-wrapper" style="overflow-x:auto;overflow-y:auto;max-height:calc(100vh - 220px);">
+            <div id="dayTimelineContainer"></div>
+          </div>
+        </div>
+
+        <!-- 주간 뷰 (시프티 스타일) -->
+        <div id="scheduleWeekView" style="display:none;">
+          <div class="calendar-header" style="margin-bottom:12px;">
+            <div class="calendar-nav">
+              <button class="btn btn-outline btn-sm" onclick="changeWeek(-1)"><i class="fas fa-chevron-left"></i></button>
+              <button class="btn btn-outline btn-sm" onclick="changeWeek(0)">이번 주</button>
+              <button class="btn btn-outline btn-sm" onclick="changeWeek(1)"><i class="fas fa-chevron-right"></i></button>
+              <input type="date" id="weekDatePicker" class="btn-outline btn-sm" style="padding:5px 10px;font-size:12px;border:1px solid var(--gray-300);border-radius:var(--radius-sm);cursor:pointer;" onchange="jumpToWeek(this.value)" title="날짜를 선택하면 해당 주로 이동합니다">
+            </div>
+            <h3 id="weekTitle"></h3>
+          </div>
+          <div class="week-grid-wrapper" style="overflow-x:auto;">
+            <table class="week-grid-table" id="weekGridTable">
+              <thead id="weekGridHead"></thead>
+              <tbody id="weekGridBody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- 달력형 뷰 -->
+        <div id="scheduleCalendarView">
+          <div class="calendar-header">
+            <div class="calendar-nav">
+              <button class="btn btn-outline btn-sm" onclick="changeCalendarMonth(-1)"><i class="fas fa-chevron-left"></i></button>
+              <button class="btn btn-outline btn-sm" onclick="changeCalendarMonth(0)">오늘</button>
+              <button class="btn btn-outline btn-sm" onclick="changeCalendarMonth(1)"><i class="fas fa-chevron-right"></i></button>
+            </div>
+            <h3 id="calendarTitle"></h3>
+          </div>
+          <div id="calendarGrid" class="calendar-grid"></div>
+        </div>
+
+        <!-- 목록형 뷰 -->
+        <div id="scheduleListView" style="display:none;">
+          <div class="filter-bar" style="margin-bottom: 12px;">
+            <input type="date" id="schedListStart" style="font-size:13px;" onchange="loadScheduleList()">
+            <span style="color:var(--gray-500);">~</span>
+            <input type="date" id="schedListEnd" style="font-size:13px;" onchange="loadScheduleList()">
+            <input type="text" id="schedListSearch" placeholder="검색..." style="font-size:13px;width:150px;" oninput="debouncedFilterScheduleList()">
+          </div>
+          <div id="scheduleListContainer" class="schedule-list-container"></div>
+          <div id="scheduleListPagination" style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;font-size:12px;">
+            <span id="schedListInfo"></span>
+            <div style="display:flex;gap:4px;">
+              <button class="btn btn-outline btn-sm" onclick="scheduleListPage(-1)"><i class="fas fa-chevron-left"></i></button>
+              <span id="schedListPageNum" style="padding:4px 8px;"></span>
+              <button class="btn btn-outline btn-sm" onclick="scheduleListPage(1)"><i class="fas fa-chevron-right"></i></button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 근무일정 추가/편집 모달 -->
+    <div id="scheduleModal" class="modal-overlay">
+      <div class="modal" style="max-width:500px;">
+        <div class="modal-header">
+          <h3 id="scheduleModalTitle">근무일정 추가</h3>
+          <button class="modal-close" onclick="closeScheduleModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+          <input type="hidden" id="schedFormId">
+          <div class="form-group">
+            <label>날짜 *</label>
+            <input type="date" id="schedFormDate" class="form-control">
+          </div>
+          <div class="form-group">
+            <label>직원 *</label>
+            <select id="schedFormEmployee" class="form-control" onchange="onScheduleEmployeeChange()">
+              <option value="">선택하세요</option>
+            </select>
+          </div>
+          <div class="form-row" style="display:flex;gap:12px;">
+            <div class="form-group" style="flex:1;">
+              <label>조직</label>
+              <input type="text" id="schedFormOrg" class="form-control" readonly style="background:var(--gray-50);">
+            </div>
+            <div class="form-group" style="flex:1;">
+              <label>직무</label>
+              <input type="text" id="schedFormDuty" class="form-control" readonly style="background:var(--gray-50);" value="경정청구팀">
+            </div>
+          </div>
+          <div class="form-row" style="display:flex;gap:12px;">
+            <div class="form-group" style="flex:1;">
+              <label>시작시간 *</label>
+              <input type="time" id="schedFormStart" class="form-control" value="09:00">
+            </div>
+            <div class="form-group" style="flex:1;">
+              <label>종료시간 *</label>
+              <input type="time" id="schedFormEnd" class="form-control" value="18:00">
+            </div>
+          </div>
+          <div class="form-group">
+            <label>근무일정 템플릿</label>
+            <select id="schedFormTemplate" class="form-control" onchange="onScheduleTemplateChange()">
+              <option value="일반근무">일반근무 (09:00-18:00)</option>
+              <option value="조기근무">조기근무 (08:00-17:00)</option>
+            </select>
+          </div>
+          <div class="form-row" style="display:flex;gap:12px;align-items:center;">
+            <div class="form-group" style="flex:1;">
+              <label>휴게시간</label>
+              <div style="display:flex;align-items:center;gap:8px;">
+                <input type="checkbox" id="schedFormAutoBreak" checked onchange="onAutoBreakChange()">
+                <span style="font-size:12px;">자동</span>
+                <input type="number" id="schedFormBreakHours" class="form-control" value="1" min="0" max="3" step="0.5" style="width:70px;padding:4px 6px;">
+                <span style="font-size:12px;">시간</span>
+              </div>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>일정노트</label>
+            <textarea id="schedFormNote" class="form-control" rows="2" placeholder="메모"></textarea>
+          </div>
+          <div id="schedFormCreatedAt" style="font-size:11px;color:var(--gray-500);display:none;"></div>
+        </div>
+        <div class="modal-footer" style="display:flex;justify-content:space-between;">
+          <button id="schedDeleteBtn" class="btn" style="color:var(--danger);border:1px solid var(--danger);display:none;" onclick="deleteScheduleAction()">
+            <i class="fas fa-trash"></i> 삭제
+          </button>
+          <div style="display:flex;gap:8px;">
+            <button class="btn btn-outline" onclick="closeScheduleModal()">닫기</button>
+            <button class="btn btn-primary" onclick="saveSchedule()">저장</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 스케줄 복사 모달 -->
+    <div id="copyScheduleModal" class="modal-overlay">
+      <div class="modal" style="max-width:440px;">
+        <div class="modal-header">
+          <h3>주간 스케줄 복사</h3>
+          <button class="modal-close" onclick="closeCopyScheduleModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label>원본 주 (월요일 기준)</label>
+            <input type="date" id="copySchedSource" class="form-control">
+            <small style="color:var(--gray-500);font-size:11px;">해당 주(월~일)의 모든 스케줄을 복사합니다.</small>
+          </div>
+          <div class="form-group">
+            <label>대상 주 (월요일 기준)</label>
+            <input type="date" id="copySchedTarget" class="form-control">
+          </div>
+          <div style="background:var(--info-light);padding:10px;border-radius:var(--radius-sm);font-size:12px;color:var(--info);">
+            <i class="fas fa-info-circle"></i> 복사된 일정은 <strong>미게시</strong> 상태로 생성됩니다. 대상 주에 이미 존재하는 일정은 건너뜁니다.
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-outline" onclick="closeCopyScheduleModal()">취소</button>
+          <button class="btn btn-primary" onclick="submitCopySchedule()"><i class="fas fa-copy"></i> 복사하기</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== 휴가관리 ===== -->
+    <div id="page-leave" class="page-section">
+      <div class="page-header">
+        <h2>휴가관리</h2>
+        <div class="header-actions">
+          <button class="btn btn-primary" onclick="openLeaveRequestModal()">
+            <i class="fas fa-plus"></i> 휴가 신청
+          </button>
+          <button class="btn btn-outline btn-sm" onclick="openLeaveManageModal()" id="leaveManageBtn" style="display:none;">
+            <i class="fas fa-cog"></i> 휴가 관리하기
+          </button>
+        </div>
+      </div>
+      <div class="page-body">
+        <div class="tab-bar" id="leaveTabBar">
+          <div class="tab-item active" onclick="switchLeaveTab('my')">내 휴가</div>
+          <div class="tab-item" onclick="switchLeaveTab('pending')">승인 대기 <span id="pendingCount" style="color:var(--danger);font-weight:700;"></span></div>
+          <div class="tab-item" onclick="switchLeaveTab('all')">전체 내역</div>
+        </div>
+        <!-- 전체 내역 탭 필터 (관리자용) -->
+        <div id="leaveFilterBar" class="filter-bar" style="display:none;">
+          <input type="date" id="leaveFilterStart" style="font-size:12px;">
+          <span>~</span>
+          <input type="date" id="leaveFilterEnd" style="font-size:12px;">
+          <select id="leaveFilterOrg" style="font-size:12px;" onchange="loadLeaves()">
+            <option value="">전체 조직</option>
+          </select>
+          <select id="leaveFilterType" style="font-size:12px;" onchange="loadLeaves()">
+            <option value="">전체 유형</option>
+            <optgroup label="연차휴가">
+              <option value="연차">연차 (8h/1일)</option>
+              <option value="반차">반차 (4h/0.5일)</option>
+              <option value="반차(5h)">반차 5h (0.625일)</option>
+              <option value="반반차">반반차 (2h/0.25일)</option>
+              <option value="부분휴가">부분휴가 (단위시간 직접입력)</option>
+            </optgroup>
+            <optgroup label="기타">
+              <option value="공휴일">공휴일(유급8h)</option>
+              <option value="공휴일(3h)">공휴일(유급3h)</option>
+              <option value="공휴일(4h)">공휴일(유급4h)</option>
+              <option value="병가">병가(증빙)</option>
+              <option value="경조사">경조사(증빙)</option>
+              <option value="여성휴가">여성휴가(무급)</option>
+              <option value="무급휴가">무급휴가(대체근무)</option>
+              <option value="민방위">민방위훈련(유급4h)</option>
+              <option value="예비군(5h)">예비군 야간(5h)</option>
+              <option value="예비군(6h)">예비군(6h)</option>
+              <option value="예비군(8h)">예비군(8h)</option>
+              <option value="무단결근">무단결근</option>
+            </optgroup>
+          </select>
+          <select id="leaveFilterStatus" style="font-size:12px;" onchange="loadLeaves()">
+            <option value="">전체 상태</option>
+            <option value="대기">대기</option>
+            <option value="승인">승인</option>
+            <option value="반려">반려</option>
+            <option value="취소">취소</option>
+          </select>
+          <div class="search-input" style="margin-left:auto;">
+            <i class="fas fa-search"></i>
+            <input type="text" id="leaveFilterKeyword" placeholder="이름 검색..." oninput="debouncedFilterLeaves()">
+          </div>
+        </div>
+        <div id="leaveListContainer"></div>
+      </div>
+    </div>
+
+    <!-- ===== 휴가 발생 ===== -->
+    <div id="page-leave-accrual" class="page-section">
+      <div class="page-header">
+        <h2>휴가 발생</h2>
+        <div class="header-actions">
+          <button class="btn btn-primary" onclick="openAccrualModal()" id="accrualAddBtn" style="display:none;">
+            <i class="fas fa-plus"></i> 수동 발생
+          </button>
+          <button class="btn btn-outline" onclick="generateAccruals()" id="accrualGenBtn" style="display:none;">
+            <i class="fas fa-magic"></i> 규칙 기반 발생
+          </button>
+          <button class="btn btn-outline" onclick="syncUsedDays()" id="accrualSyncBtn" style="display:none;">
+            <i class="fas fa-sync-alt"></i> 사용일수 동기화
+          </button>
+        </div>
+      </div>
+      <div class="page-body">
+        <!-- 필터바 -->
+        <div class="filter-bar" id="accrualFilterBar">
+          <label style="font-size:12px;color:var(--gray-600);">기간</label>
+          <input type="date" id="accrualStartDate" style="font-size:12px;" onchange="loadAccrualData()">
+          <span style="font-size:12px;">~</span>
+          <input type="date" id="accrualEndDate" style="font-size:12px;" onchange="loadAccrualData()">
+          <select id="accrualFilterOrg" style="font-size:12px;" onchange="loadAccrualData()">
+            <option value="">전체 조직</option>
+          </select>
+          <label style="font-size:12px;display:flex;align-items:center;gap:4px;cursor:pointer;">
+            <input type="checkbox" id="accrualActiveOnly" checked onchange="loadAccrualData()"> 활성 직원만
+          </label>
+        </div>
+        <!-- 뷰 전환 탭 -->
+        <div class="tab-bar" id="accrualTabBar">
+          <div class="tab-item active" onclick="switchAccrualView('employee')">직원 뷰</div>
+          <div class="tab-item" onclick="switchAccrualView('list')">목록 뷰</div>
+        </div>
+        <div id="accrualContainer"></div>
+      </div>
+    </div>
+
+    <!-- ===== 급여 ===== -->
+    <div id="page-payroll" class="page-section">
+      <div class="page-header">
+        <h2>급여</h2>
+        <div class="header-actions" id="payrollActions"></div>
+      </div>
+      <div class="page-body">
+        <div class="tab-bar" id="payrollTabBar">
+          <div class="tab-item active" onclick="switchPayrollTab('my')">내 급여</div>
+          <div class="tab-item" onclick="switchPayrollTab('manage')">급여 관리</div>
+          <div class="tab-item" onclick="switchPayrollTab('closing')" id="payrollClosingTab" style="display:none;">마감 관리</div>
+        </div>
+        <div id="payrollContainer"></div>
+      </div>
+    </div>
+
+    <!-- ===== 직원관리 ===== -->
+    <div id="page-employee" class="page-section">
+      <div class="page-header">
+        <h2>직원관리</h2>
+        <div class="header-actions">
+          <button class="btn btn-primary" onclick="openAddEmployeeModal()">
+            <i class="fas fa-plus"></i> 직원 등록
+          </button>
+        </div>
+      </div>
+      <div class="page-body">
+        <div class="filter-bar">
+          <select id="empFilterOrg" onchange="applyEmployeeFilters()">
+            <option value="">전체 조직</option>
+          </select>
+          <select id="empFilterStatus" onchange="applyEmployeeFilters()">
+            <option value="">전체 상태</option>
+            <option value="재직">재직</option>
+            <option value="퇴직">퇴직</option>
+            <option value="휴직">휴직</option>
+          </select>
+          <div class="search-input">
+            <i class="fas fa-search"></i>
+            <input type="text" id="empFilterKeyword" placeholder="이름, 이메일 검색..." oninput="debouncedApplyEmployeeFilters()">
+          </div>
+          <span id="empCountLabel" style="color:var(--gray-500);font-size:13px;margin-left:auto;"></span>
+        </div>
+        <div id="employeeListContainer"></div>
+      </div>
+    </div>
+
+    <!-- ===== 리포트 ===== -->
+    <div id="page-report" class="page-section">
+      <div class="page-header">
+        <h2>리포트</h2>
+        <div class="header-actions" style="gap:6px;">
+          <button class="btn btn-sm btn-outline" onclick="setReportPreset('thisMonth')">이번 달</button>
+          <button class="btn btn-sm btn-outline" onclick="setReportPreset('lastMonth')">지난 달</button>
+        </div>
+      </div>
+      <div class="page-body">
+        <div class="filter-bar" id="reportFilterBar">
+          <input type="month" id="reportPeriod" onchange="loadReport()" style="font-size:12px;">
+          <select id="reportOrg" onchange="loadReport()" style="font-size:12px;">
+            <option value="">전체 조직</option>
+          </select>
+          <label style="font-size:12px;display:flex;align-items:center;gap:4px;cursor:pointer;">
+            <input type="checkbox" id="reportActiveOnly" checked onchange="loadReport()"> 활성 직원만
+          </label>
+          <div style="margin-left:auto;display:flex;gap:8px;align-items:center;">
+            <label style="font-size:11px;color:var(--gray-600);">지각</label>
+            <select id="reportLateThreshold" style="font-size:12px;width:60px;" onchange="loadReport()">
+              <option value="0">0분</option><option value="1">1분</option><option value="5">5분</option>
+              <option value="10" selected>10분</option><option value="15">15분</option><option value="30">30분</option>
+            </select>
+            <label style="font-size:11px;color:var(--gray-600);">조퇴</label>
+            <select id="reportEarlyThreshold" style="font-size:12px;width:60px;" onchange="loadReport()">
+              <option value="0" selected>0분</option><option value="5">5분</option>
+              <option value="10">10분</option><option value="15">15분</option><option value="30">30분</option>
+            </select>
+          </div>
+        </div>
+        <div id="reportContainer"></div>
+      </div>
+    </div>
+
+    <!-- ===== 요청 ===== -->
+    <div id="page-request" class="page-section">
+      <div class="page-header">
+        <h2>요청</h2>
+        <div class="header-actions">
+          <button class="btn btn-primary" onclick="openRequestModal()"><i class="fas fa-plus"></i> 새 요청</button>
+        </div>
+      </div>
+      <div class="page-body">
+        <div class="tab-bar" id="requestTabBar">
+          <div class="tab-item active" onclick="switchRequestTab('my')">내 요청</div>
+          <div class="tab-item" onclick="switchRequestTab('manage')" id="requestManageTab" style="display:none;">요청 관리</div>
+        </div>
+        <div id="requestContainer"></div>
+      </div>
+    </div>
+
+    <!-- ===== 설정 ===== -->
+    <div id="page-settings" class="page-section">
+      <div class="page-header">
+        <h2>설정</h2>
+      </div>
+      <div class="page-body">
+        <div class="tab-bar" id="settingsTabBar">
+          <div class="tab-item active" onclick="switchSettingsTab('general')">기본설정</div>
+          <div class="tab-item" onclick="switchSettingsTab('labor')">근로정보</div>
+          <div class="tab-item" onclick="switchSettingsTab('location')">출퇴근장소</div>
+          <div class="tab-item" onclick="switchSettingsTab('leave-types')">휴가유형</div>
+          <div class="tab-item" onclick="switchSettingsTab('templates')">근무템플릿</div>
+          <div class="tab-item" onclick="switchSettingsTab('holidays')">공휴일</div>
+          <div class="tab-item" onclick="switchSettingsTab('hr-sync')">HR 동기화</div>
+        </div>
+        <div id="settingsContainer">
+          <!-- settingsContainer is injected via JS, but we will ensure Location Tracking UI is injected there -->
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== 내 프로필 ===== -->
+    <div id="page-profile" class="page-section">
+      <div class="page-header">
+        <h2>내 프로필</h2>
+        <div class="header-actions">
+          <button class="btn btn-primary" onclick="saveProfile()"><i class="fas fa-save"></i> 저장</button>
+        </div>
+      </div>
+      <div class="page-body">
+        <div class="card" style="margin-bottom:16px;">
+          <div class="card-header"><h3><i class="fas fa-user" style="margin-right:8px;color:var(--primary);"></i>기본 정보</h3></div>
+          <div class="card-body">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+              <div class="form-group">
+                <label>이름</label>
+                <input type="text" id="profileName" readonly style="background:var(--gray-100);cursor:not-allowed;">
+              </div>
+              <div class="form-group">
+                <label>이메일</label>
+                <input type="email" id="profileEmail" readonly style="background:var(--gray-100);cursor:not-allowed;">
+              </div>
+              <div class="form-group">
+                <label>연락처</label>
+                <input type="tel" id="profilePhone" placeholder="010-0000-0000">
+              </div>
+              <div class="form-group">
+                <label>입사일</label>
+                <input type="text" id="profileJoinDate" readonly style="background:var(--gray-100);cursor:not-allowed;">
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="card" style="margin-bottom:16px;">
+          <div class="card-header"><h3><i class="fas fa-building" style="margin-right:8px;color:var(--info);"></i>배정 정보</h3></div>
+          <div class="card-body">
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;">
+              <div class="form-group">
+                <label>조직</label>
+                <input type="text" id="profileOrg" readonly style="background:var(--gray-100);cursor:not-allowed;">
+              </div>
+              <div class="form-group">
+                <label>직무</label>
+                <input type="text" id="profileDuty" readonly style="background:var(--gray-100);cursor:not-allowed;">
+              </div>
+              <div class="form-group">
+                <label>액세스 권한</label>
+                <input type="text" id="profileRole" readonly style="background:var(--gray-100);cursor:not-allowed;">
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="card" style="margin-bottom:16px;">
+          <div class="card-header"><h3><i class="fas fa-won-sign" style="margin-right:8px;color:var(--success);"></i>급여 정보</h3></div>
+          <div class="card-body">
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;">
+              <div class="form-group">
+                <label>시급</label>
+                <input type="text" id="profileWage" readonly style="background:var(--gray-100);cursor:not-allowed;">
+              </div>
+              <div class="form-group">
+                <label>연차 잔여</label>
+                <input type="text" id="profileLeave" readonly style="background:var(--gray-100);cursor:not-allowed;">
+              </div>
+              <div class="form-group">
+                <label>상태</label>
+                <input type="text" id="profileStatus" readonly style="background:var(--gray-100);cursor:not-allowed;">
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== 직원 등록/수정 모달 ===== -->
+  <div id="employeeModal" class="modal-overlay">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 id="empModalTitle">직원 등록</h3>
+        <button class="modal-close" onclick="closeEmployeeModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="empFormId">
+        <div class="form-row">
+          <div class="form-group">
+            <label>이름 <span class="required">*</span></label>
+            <input type="text" id="empFormName" placeholder="이름">
+          </div>
+          <div class="form-group">
+            <label>이메일 <span class="required">*</span></label>
+            <input type="email" id="empFormEmail" placeholder="email@zsoo.kr">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>연락처</label>
+            <input type="tel" id="empFormPhone" placeholder="010-0000-0000">
+          </div>
+          <div class="form-group">
+            <label>조직 <span class="required">*</span></label>
+            <select id="empFormOrg"></select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>직무</label>
+            <input type="text" id="empFormDuty" value="경정청구팀">
+          </div>
+          <div class="form-group">
+            <label>입사일</label>
+            <input type="date" id="empFormJoinDate">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>시급 (원)</label>
+            <input type="number" id="empFormHourlyWage" value="11000">
+          </div>
+          <div class="form-group">
+            <label>일급 (원)</label>
+            <input type="number" id="empFormDailyWage" value="88000">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>은행명</label>
+            <input type="text" id="empFormBankName">
+          </div>
+          <div class="form-group">
+            <label>계좌번호</label>
+            <input type="text" id="empFormBankAccount">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>연차 잔여일</label>
+            <input type="number" id="empFormAnnualLeave" value="15">
+          </div>
+          <div class="form-group">
+            <label>상태</label>
+            <select id="empFormStatus">
+              <option value="재직">재직</option>
+              <option value="퇴직">퇴직</option>
+              <option value="휴직">휴직</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>비고</label>
+          <textarea id="empFormMemo" rows="2" placeholder="비고"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" onclick="closeEmployeeModal()">취소</button>
+        <button class="btn btn-primary" id="empFormSubmitBtn" onclick="submitEmployeeForm()">
+          <i class="fas fa-save"></i> 저장
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== 휴가 신청 모달 ===== -->
+  <!-- 휴가 관리 모달 -->
+  <div id="leaveManageModal" class="modal-overlay">
+    <div class="modal" style="max-width:640px;">
+      <div class="modal-header">
+        <h3>휴가 관리</h3>
+        <button class="modal-close" onclick="closeLeaveManageModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>직원 선택</label>
+          <select id="leaveManageEmpSelect" class="form-control" onchange="loadLeaveManageBalance()">
+            <option value="">-- 직원 선택 --</option>
+          </select>
+        </div>
+        <div id="leaveManageBalanceArea" style="display:none;">
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:16px;">
+            <div style="text-align:center;padding:16px;background:var(--info-light);border-radius:var(--radius-sm);">
+              <div id="lmTotalDays" style="font-size:24px;font-weight:bold;color:var(--info);">-</div>
+              <div style="font-size:12px;color:var(--gray-600);">발생일수</div>
+            </div>
+            <div style="text-align:center;padding:16px;background:var(--warning-light);border-radius:var(--radius-sm);">
+              <div id="lmUsedDays" style="font-size:24px;font-weight:bold;color:var(--warning);">-</div>
+              <div style="font-size:12px;color:var(--gray-600);">사용일수</div>
+            </div>
+            <div style="text-align:center;padding:16px;background:var(--success-light);border-radius:var(--radius-sm);">
+              <div id="lmRemainDays" style="font-size:24px;font-weight:bold;color:var(--success);">-</div>
+              <div style="font-size:12px;color:var(--gray-600);">잔여일수</div>
+            </div>
+          </div>
+          <div style="border:1px solid var(--gray-200);border-radius:var(--radius-sm);padding:16px;">
+            <h4 style="margin-bottom:12px;font-size:14px;"><i class="fas fa-sliders-h"></i> 빠른 조정</h4>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+              <div class="form-group">
+                <label>조정 일수</label>
+                <input type="number" id="lmAdjustDays" class="form-control" step="0.5" value="1">
+                <small style="color:var(--gray-500);font-size:11px;">양수=추가, 음수=차감</small>
+              </div>
+              <div class="form-group">
+                <label>만료 시점</label>
+                <input type="date" id="lmAdjustExpiry" class="form-control">
+              </div>
+            </div>
+            <div class="form-group">
+              <label>사유</label>
+              <input type="text" id="lmAdjustMemo" class="form-control" placeholder="조정 사유...">
+            </div>
+            <div style="display:flex;gap:8px;">
+              <button class="btn btn-primary btn-sm" onclick="submitLeaveAdjust()">
+                <i class="fas fa-save"></i> 조정 적용
+              </button>
+              <button class="btn btn-outline btn-sm" onclick="syncEmployeeLeave()">
+                <i class="fas fa-sync-alt"></i> 사용일수 동기화
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" onclick="closeLeaveManageModal()">닫기</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="leaveModal" class="modal-overlay">
+    <div class="modal" style="max-width:520px;">
+      <div class="modal-header">
+        <h3>휴가 신청</h3>
+        <button class="modal-close" onclick="closeLeaveModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>휴가 유형 <span class="required">*</span></label>
+          <select id="leaveFormType" onchange="onLeaveTypeChange()"></select>
+          <div id="leaveTypeInfo" style="font-size:11px;color:var(--gray-500);margin-top:4px;"></div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>시작일 <span class="required">*</span></label>
+            <input type="date" id="leaveFormStart" onchange="onLeaveTypeChange()">
+          </div>
+          <div class="form-group" id="leaveFormEndGroup">
+            <label>종료일 <span class="required">*</span></label>
+            <input type="date" id="leaveFormEnd" onchange="onLeaveTypeChange()">
+          </div>
+        </div>
+        <div id="leaveDeductPreview" style="padding:8px 12px;background:var(--info-light);border-radius:var(--radius-sm);font-size:12px;display:none;">
+          차감 예상: <strong id="leaveDeductLabel"></strong>
+        </div>
+        <div class="form-group">
+          <label>사유</label>
+          <textarea id="leaveFormReason" rows="3" placeholder="휴가 사유를 입력하세요"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" onclick="closeLeaveModal()">취소</button>
+        <button class="btn btn-primary" id="leaveFormSubmitBtn" onclick="submitLeaveForm()">
+          <i class="fas fa-paper-plane"></i> 신청
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== 반려 사유 모달 ===== -->
+  <div id="rejectModal" class="modal-overlay">
+    <div class="modal" style="max-width:440px;">
+      <div class="modal-header">
+        <h3>반려 사유</h3>
+        <button class="modal-close" onclick="closeRejectModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="rejectLeaveId">
+        <div class="form-group">
+          <label>반려 사유</label>
+          <textarea id="rejectReason" rows="3" placeholder="반려 사유를 입력하세요"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" onclick="closeRejectModal()">취소</button>
+        <button class="btn btn-danger" onclick="submitRejectLeave()">
+          <i class="fas fa-times"></i> 반려
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== 급여 계산 모달 ===== -->
+  <div id="payrollCalcModal" class="modal-overlay">
+    <div class="modal" style="max-width:440px;">
+      <div class="modal-header">
+        <h3>급여 계산</h3>
+        <button class="modal-close" onclick="closePayrollCalcModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>정산 기간 <span class="required">*</span></label>
+          <input type="month" id="payrollCalcPeriod">
+        </div>
+        <div class="form-group">
+          <label>조직 (선택)</label>
+          <select id="payrollCalcOrg">
+            <option value="">전체</option>
+          </select>
+        </div>
+        <div class="form-group" style="margin-top:16px;">
+          <label>
+            <input type="checkbox" id="payrollCalcFinalize" style="width:auto;margin-right:6px;">
+            확정 처리 (확정 후 수정 불가)
+          </label>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" onclick="closePayrollCalcModal()">취소</button>
+        <button class="btn btn-primary" onclick="submitPayrollCalc()">
+          <i class="fas fa-calculator"></i> 계산
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== 출퇴근기록 추가/수정 모달 ===== -->
+  <div id="attRecordModal" class="modal-overlay">
+    <div class="modal" style="max-width:560px;">
+      <div class="modal-header">
+        <h3 id="attRecordModalTitle">출퇴근기록 추가하기</h3>
+        <button class="modal-close" onclick="closeAttRecordModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="attRecEditId">
+        <div class="form-row">
+          <div class="form-group">
+            <label>날짜 <span class="required">*</span></label>
+            <input type="date" id="attRecDate">
+          </div>
+          <div class="form-group">
+            <label>직원 <span class="required">*</span></label>
+            <select id="attRecEmployee" onchange="onAttRecEmployeeChange()"></select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>근무일정</label>
+          <div id="attRecSchedInfo" style="font-size:12px;color:var(--gray-600);padding:6px;background:var(--gray-50);border-radius:var(--radius-sm);">
+            일정 없음
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>조직</label>
+            <input type="text" id="attRecOrg2" readonly style="background:var(--gray-50);">
+          </div>
+          <div class="form-group">
+            <label>직무</label>
+            <input type="text" id="attRecDuty" readonly style="background:var(--gray-50);" value="경정청구팀">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>출근시간</label>
+            <input type="time" id="attRecClockIn" value="09:00">
+          </div>
+          <div class="form-group">
+            <label>퇴근시간</label>
+            <input type="time" id="attRecClockOut" value="18:00">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>출근 장소</label>
+            <input type="text" id="attRecLocIn" readonly style="background:var(--gray-50);">
+          </div>
+          <div class="form-group">
+            <label>퇴근 장소</label>
+            <input type="text" id="attRecLocOut" readonly style="background:var(--gray-50);">
+          </div>
+        </div>
+        <div class="form-group">
+          <label>근무노트</label>
+          <textarea id="attRecNote" rows="2" placeholder="특이사항 입력"></textarea>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>상태</label>
+            <select id="attRecStatus">
+              <option value="정상">정상</option>
+              <option value="지각">지각</option>
+              <option value="조퇴">조퇴</option>
+              <option value="결근">결근</option>
+              <option value="휴가">휴가</option>
+              <option value="퇴근누락">퇴근누락</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label><input type="checkbox" id="attRecConfirmed"> 확정됨</label>
+          </div>
+        </div>
+        <div id="attRecCreatedAt" style="font-size:11px;color:var(--gray-500);margin-top:4px;"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-danger btn-outline" id="attRecDeleteBtn" onclick="deleteAttRecord()" style="margin-right:auto;display:none;">
+          <i class="fas fa-trash"></i> 삭제하기
+        </button>
+        <button class="btn btn-outline" onclick="closeAttRecordModal()">닫기</button>
+        <button class="btn btn-primary" onclick="saveAttRecord()">
+          <i class="fas fa-save"></i> <span id="attRecSaveLabel">추가하기</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 휴가 발생 모달 -->
+  <div id="accrualModal" class="modal-overlay">
+    <div class="modal" style="max-width:520px;">
+      <div class="modal-header">
+        <h3 id="accrualModalTitle">휴가 수동 발생</h3>
+        <button class="modal-close" onclick="closeAccrualModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="accrualEditId" value="">
+        <div class="form-group">
+          <label>직원</label>
+          <select id="accrualFormEmp" style="width:100%;padding:8px;border:1px solid var(--gray-300);border-radius:var(--radius-sm);font-size:13px;">
+            <option value="">-- 직원 선택 --</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>휴가 그룹</label>
+          <select id="accrualFormGroup" style="width:100%;padding:8px;border:1px solid var(--gray-300);border-radius:var(--radius-sm);font-size:13px;">
+            <option value="연차휴가">연차휴가</option>
+          </select>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+          <div class="form-group">
+            <label>발생 일수</label>
+            <input type="number" id="accrualFormDays" min="0" step="0.5" value="1" style="width:100%;padding:8px;border:1px solid var(--gray-300);border-radius:var(--radius-sm);font-size:13px;">
+          </div>
+          <div class="form-group" id="accrualUsedGroup" style="display:none;">
+            <label>사용 일수</label>
+            <input type="number" id="accrualFormUsed" min="0" step="0.5" value="0" style="width:100%;padding:8px;border:1px solid var(--gray-300);border-radius:var(--radius-sm);font-size:13px;">
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+          <div class="form-group">
+            <label>발생 시점</label>
+            <input type="date" id="accrualFormStart" style="width:100%;padding:8px;border:1px solid var(--gray-300);border-radius:var(--radius-sm);font-size:13px;">
+          </div>
+          <div class="form-group">
+            <label>만료 시점</label>
+            <input type="date" id="accrualFormExpiry" style="width:100%;padding:8px;border:1px solid var(--gray-300);border-radius:var(--radius-sm);font-size:13px;">
+          </div>
+        </div>
+        <div class="form-group">
+          <label>메모</label>
+          <textarea id="accrualFormMemo" rows="2" placeholder="발생 사유 등" style="width:100%;padding:8px;border:1px solid var(--gray-300);border-radius:var(--radius-sm);font-size:13px;resize:vertical;"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-danger btn-outline" id="accrualDeleteBtn" onclick="deleteAccrual()" style="margin-right:auto;display:none;">
+          <i class="fas fa-trash"></i> 삭제
+        </button>
+        <button class="btn btn-outline" onclick="closeAccrualModal()">취소</button>
+        <button class="btn btn-primary" onclick="saveAccrual()">
+          <i class="fas fa-save"></i> <span id="accrualSaveLabel">발생하기</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 요청 모달 -->
+  <div id="requestModal" class="modal-overlay">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 id="requestModalTitle">새 요청</h3>
+        <button class="modal-close" onclick="closeRequestModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>요청 유형</label>
+          <select id="reqType" onchange="toggleRequestFields()">
+            <option value="">선택해주세요</option>
+            <option value="근무일정생성요청">근무일정 생성 요청</option>
+            <option value="휴가생성요청">휴가 생성 요청</option>
+            <option value="출퇴근기록수정요청">출퇴근기록 수정 요청</option>
+          </select>
+        </div>
+        <div id="reqFieldsSchedule" style="display:none;">
+          <div class="form-group"><label>날짜</label><input type="date" id="reqSchedDate"></div>
+          <div class="form-row" style="display:flex;gap:12px;">
+            <div class="form-group" style="flex:1;"><label>시작시간</label><input type="time" id="reqSchedStart" value="09:00"></div>
+            <div class="form-group" style="flex:1;"><label>종료시간</label><input type="time" id="reqSchedEnd" value="18:00"></div>
+          </div>
+          <div class="form-group"><label>근무템플릿</label><input type="text" id="reqSchedTemplate" value="일반근무"></div>
+          <div class="form-group"><label>사유</label><textarea id="reqSchedNote" rows="2" placeholder="요청 사유"></textarea></div>
+        </div>
+        <div id="reqFieldsLeave" style="display:none;">
+          <div class="form-group"><label>휴가유형</label><select id="reqLeaveType"></select></div>
+          <div class="form-row" style="display:flex;gap:12px;">
+            <div class="form-group" style="flex:1;"><label>시작일</label><input type="date" id="reqLeaveStart"></div>
+            <div class="form-group" style="flex:1;"><label>종료일</label><input type="date" id="reqLeaveEnd"></div>
+          </div>
+          <div class="form-group"><label>사유</label><textarea id="reqLeaveReason" rows="2" placeholder="요청 사유"></textarea></div>
+        </div>
+        <div id="reqFieldsAttendance" style="display:none;">
+          <div class="form-group"><label>출퇴근 기록ID</label><input type="text" id="reqAttRecordId" placeholder="ATT-XXXX"></div>
+          <div class="form-group"><label>날짜</label><input type="date" id="reqAttDate"></div>
+          <div class="form-row" style="display:flex;gap:12px;">
+            <div class="form-group" style="flex:1;"><label>수정 출근시간</label><input type="time" id="reqAttClockIn"></div>
+            <div class="form-group" style="flex:1;"><label>수정 퇴근시간</label><input type="time" id="reqAttClockOut"></div>
+          </div>
+          <div class="form-group"><label>사유</label><textarea id="reqAttReason" rows="2" placeholder="수정 사유"></textarea></div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" onclick="closeRequestModal()">취소</button>
+        <button class="btn btn-primary" onclick="submitRequestForm()"><i class="fas fa-paper-plane"></i> 요청 제출</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 급여명세서 모달 -->
+  <div id="payslipModal" class="modal-overlay">
+    <div class="modal" style="max-width:800px;">
+      <div class="modal-header">
+        <h3>급여명세서</h3>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-sm btn-outline" onclick="printPayslip()"><i class="fas fa-print"></i> 인쇄</button>
+          <button class="modal-close" onclick="closePayslipModal()">&times;</button>
+        </div>
+      </div>
+      <div class="modal-body" id="payslipContent" style="padding:0;"></div>
+    </div>
+  </div>
+
+  <!-- 모바일 메뉴 버튼 -->
+  <button id="mobileMenuBtn" style="display:none;position:fixed;bottom:20px;left:20px;z-index:101;width:48px;height:48px;border-radius:50%;background:var(--primary);color:var(--white);font-size:20px;box-shadow:var(--shadow-md);" onclick="toggleSidebar()">
+    <i class="fas fa-bars"></i>
+  </button>
+
+<script src="js/app.js"></script>
+</body>
+</html>
